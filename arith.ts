@@ -17,9 +17,9 @@ function typecheck(t: Term): Type {
 		case "false":
 			return { tag: "Boolean" };
 		case "if": {
-			// if 文の型チェック
 			const condTy = typecheck(t.cond);
-			if(condTy. tag !== "Boolean") throw "boolean expected";
+			// 下記をコメントアウトして、条件式の型を任意の型にすることも可能
+			// if(condTy. tag !== "Boolean") throw "boolean expected";
 			// then と else の型チェック
 			const thnTy = typecheck(t.thn);
 			const elsTy = typecheck(t.els);
@@ -45,3 +45,5 @@ function typecheck(t: Term): Type {
 
 console.log(typecheck(parseArith("1 + 2"))); // { tag: 'Number' }
 console.log(typecheck(parseArith("1 + true"))); // Error: number expected
+// typescriptのようにifに1なども渡せるようにするが、trueやfalseは渡せないようにする
+console.log(typecheck(parseArith("(1 + true) ? true : false")));
