@@ -12,7 +12,9 @@ type Term =
   | { tag: "func"; params: Param[]; body: Term }
   | { tag: "call"; func: Term; args: Term[] }
   | { tag: "seq"; body: Term; rest: Term }
-  | { tag: "const"; name: string; init: Term; rest: Term };
+  | { tag: "const"; name: string; init: Term; rest: Term }
+  | { tag: "seq2"; body: Term[] }
+  | { tag: "const2"; name: string; init: Term };
 
 type Type =
   | { tag: "Boolean" }
@@ -88,7 +90,7 @@ function typecheck(t: Term, tyEnv: TypeEnv): Type {
       // 関数の型をコピーして新しい型を作成
       const newTyEnv = { ...tyEnv };
       // 型に引数の型を追加
-      for(const {name, type} of t.params) {
+      for (const { name, type } of t.params) {
         newTyEnv[name] = type;
       }
       // 関数の中身と引数の型をチェックする
@@ -100,19 +102,47 @@ function typecheck(t: Term, tyEnv: TypeEnv): Type {
       // 再帰的に func の型をチェック
       const funcTy = typecheck(t.func, tyEnv);
       // 呼び出す関数の型が Func であることを確認
-      if(funcTy.tag !== "Func") throw new Error("function type expected");
+      if (funcTy.tag !== "Func") throw new Error("function type expected");
       // 引数の型が関数の引数の型と一致することを確認
-      if(funcTy.params.length !== t.args.length) {
+      if (funcTy.params.length !== t.args.length) {
         throw new Error("wrong number of arguments");
       }
       // 各引数の型をチェック
       for (let i = 0; i < t.args.length; i++) {
         const argTy = typecheck(t.args[i], tyEnv);
-        if(!typeEq(argTy, funcTy.params[i].type)) {
+        if (!typeEq(argTy, funcTy.params[i].type)) {
           throw new Error("parameter type mismatch");
         }
       }
       return funcTy.retType; // 関数の戻り値の型を返す
+    }
+    case "seq": {
+      // seq は複数の式を順に再帰的に評価する
+      // bodyの返り値は特に不要
+      typecheck(t.body, tyEnv);
+      return typecheck(t.rest, tyEnv);
+    }
+    case "seq2": {
+      let lastTy: Type | null = null;
+      // t.bodyが配列なのですべて検査
+      for (const term of t.body) {
+        if (term.tag === "const2") {
+          // const2の場合、初期値をチェック
+          const ty = typecheck(term.init, tyEnv);
+          // 下の変数をコピーしtyのものを追加
+          tyEnv = { ...tyEnv, [term.name]: ty };
+        } else {
+          lastTy = typecheck(term, tyEnv);
+        }
+      }
+      return lastTy!;
+    }
+    case "const": {
+      const ty = typecheck(t.init, tyEnv);
+      // const newTyEnv = { ...tyEnv , [t.name]: ty};を以下に分解
+      const newTyEnv = { ...tyEnv };
+      newTyEnv[t.name] = ty; // 新しい変数を型環境に追加
+      return typecheck(t.rest, newTyEnv);
     }
     default:
       throw new Error("not implemented yet");
@@ -122,3 +152,16 @@ function typecheck(t: Term, tyEnv: TypeEnv): Type {
 console.log(typecheck(parseBasic("(x: boolean) => 42"), {}));
 console.log(typecheck(parseBasic("(x: number) => x"), {}));
 console.log(typecheck(parseBasic("( (x: number) => x )(42)"), {}));
+
+console.log(
+  typecheck(
+    parseBasic(`
+    const add = (x: number, y: number) => x + y;
+    const select = (b: boolean, x: number, y: number) => b? x : y;
+    const x = add(1, add(2, 3));
+    const y = select (true, x, x);
+
+    y;`), // number型
+    {}
+  )
+);
